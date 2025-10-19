@@ -1,0 +1,44 @@
+{{javascript:
+// ==== Simple Perchance Plugin Library ====
+const plugin = {};
+
+// Safe fetch wrapper
+plugin.safeFetch = async function(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    const err = new Error(`Network error ${res.status}: ${res.statusText}`);
+    err.status = res.status;
+    err.body = text;
+    throw err;
+  }
+  return res;
+};
+
+// Generate an image (demo mode by default)
+plugin.generateImage = async function(prompt, opts = {}) {
+  if (!prompt || typeof prompt !== 'string') {
+    throw new Error('prompt required (string)');
+  }
+
+  // Demo placeholder: 1x1 transparent PNG
+  return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NkYGBgAAAABAABJzQnCgAAAABJRU5ErkJggg==';
+};
+
+// Post a comment (demo, just returns the comment object)
+plugin.postComment = async function(channel, text, author='Perchance User') {
+  return { channel, text, author, ts: Date.now() };
+};
+
+// Fetch comments (demo, returns empty array)
+plugin.getComments = async function(channel) {
+  return [];
+};
+
+// Escape HTML helper
+plugin.escapeHtml = function(s) {
+  return String(s).replace(/[&<>"']/g, (m) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+};
+
+return plugin;
+}}
