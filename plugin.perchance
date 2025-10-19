@@ -1,6 +1,13 @@
 {{javascript:
-// ==== Simple Perchance Plugin Library ====
+// ==== Perchance Plugin Library ====
 const plugin = {};
+
+// Config — can be updated in host generator
+plugin._config = {
+  imageEndpoint: 'https://example.com/api/generate-image',
+  commentsEndpoint: 'https://example.com/api/comments',
+  apiKey: null
+};
 
 // Safe fetch wrapper
 plugin.safeFetch = async function(url, options = {}) {
@@ -15,27 +22,80 @@ plugin.safeFetch = async function(url, options = {}) {
   return res;
 };
 
-// Generate an image (demo mode by default)
+// Generate an image (returns Blob, data URL, or {url: ...})
 plugin.generateImage = async function(prompt, opts = {}) {
   if (!prompt || typeof prompt !== 'string') {
     throw new Error('prompt required (string)');
   }
 
-  // Demo placeholder: 1x1 transparent PNG
-  return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NkYGBgAAAABAABJzQnCgAAAABJRU5ErkJggg==';
+  // Demo placeholder
+  if (plugin._config.imageEndpoint === 'DEMO') {
+    return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIW2NkYGBgAAAABAABJzQnCgAAAABJRU5ErkJggg==';
+  }
+
+  if (!plugin._config.imageEndpoint) {
+    throw new Error('Image endpoint not configured in plugin._config.imageEndpoint');
+  }
+
+  const body = {
+    prompt,
+    size: opts.size || opts.width || opts.height || 1024,
+    width: opts.width,
+    height: opts.height,
+    format: opts.format || 'png'
+  };
+
+  const headers = {
+    'Accept': 'application/octet-stream',
+    'Content-Type': 'application/json'
+  };
+  if (plugin._config.apiKey) headers['Authorization'] = `Bearer ${plugin._config.apiKey}`;
+
+  const res = await plugin.safeFetch(plugin._config.imageEndpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body)
+  });
+
+  const contentType = res.headers.get('Content-Type') || '';
+  if (contentType.includes('application/json')) {
+    const json = await res.json();
+    if (json && json.url) return json;
+    if (json && json.base64) return `data:image/png;base64,${json.base64}`;
+    throw new Error('Unexpected JSON response from image endpoint');
+  }
+
+  return await res.blob();
 };
 
-// Post a comment (demo, just returns the comment object)
+// Post a comment (returns posted comment object)
 plugin.postComment = async function(channel, text, author='Perchance User') {
-  return { channel, text, author, ts: Date.now() };
+  if (!plugin._config.commentsEndpoint) throw new Error('comments endpoint not configured');
+
+  const res = await plugin.safeFetch(plugin._config.commentsEndpoint, {
+    method: 'POST',
+    headers: Object.assign({
+      'Content-Type': 'application/json'
+    }, plugin._config.apiKey ? { Authorization: `Bearer ${plugin._config.apiKey}` } : {}),
+    body: JSON.stringify({ channel, text, author })
+  });
+
+  return await res.json();
 };
 
-// Fetch comments (demo, returns empty array)
+// Fetch comments (returns array)
 plugin.getComments = async function(channel) {
-  return [];
+  if (!plugin._config.commentsEndpoint) throw new Error('comments endpoint not configured');
+
+  const res = await plugin.safeFetch(`${plugin._config.commentsEndpoint}?channel=${encodeURIComponent(channel)}`, {
+    method: 'GET',
+    headers: plugin._config.apiKey ? { Authorization: `Bearer ${plugin._config.apiKey}` } : undefined
+  });
+
+  return await res.json();
 };
 
-// Escape HTML helper
+// Small helper: escape HTML if needed in string outputs
 plugin.escapeHtml = function(s) {
   return String(s).replace(/[&<>"']/g, (m) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
 };
